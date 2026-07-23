@@ -1,0 +1,195 @@
+[project]
+name = "glyph"
+version = "0.1.0"
+description = "Molecular and Markush structure recognition from chemical images"
+license = "Apache-2.0"
+license-files = ["LICENSE"]
+requires-python = ">=3.11"
+dependencies = [
+    "numpy>=1.26,<3.0",
+    "Pillow>=10.3",
+    "PyYAML>=6.0",
+    "tqdm>=4.66",
+    "huggingface-hub>=0.24",
+    "typer>=0.20",
+    "wandb>=0.26",
+]
+
+[project.optional-dependencies]
+# Install a CUDA-matched torch wheel (cu128 for Blackwell) from the PyTorch index when needed.
+ocsr = [
+    "torch>=2.7",
+    "timm>=1.0",
+    "rdkit>=2024.3.1",
+    "SmilesPE>=0.0.3",
+    "pyarrow>=15.0",
+    "datasets>=2.20",
+]
+markush = [
+    "torch>=2.7",
+    "torchvision",
+    "transformers==5.6.2",
+    "peft>=0.19",
+    "accelerate>=1.13",
+    "datasets>=4.8",
+    "qwen-vl-utils",
+    "rdkit>=2024.3.1",
+    "pydantic>=2.0",
+    # Required by the Qwen tokenizer/processor loaded from the checkpoint; without
+    # these the AutoProcessor.from_pretrained call fails and silently falls back
+    # to the base model's processor.
+    "sentencepiece>=0.2.0",
+    "tiktoken>=0.7",
+]
+# Training-only fused cross-entropy. FLA's Triton kernel computes the LM loss
+# without materializing the fp32 [batch, seq, vocab] logits copy (the allocation
+# that OOM'd bs>=4 runs). Kept OUT of `markush` on purpose: `markush` is the
+# inference path most users install, and fused CE is training-only. Add this on
+# top of `markush` (or use `all`) for the paper-faithful run. `flash-linear-attention`
+# pulls its `fla-core` kernel package and `einops`; Triton ships with the cu128
+# torch wheel. If the kernel is absent or fails on the local GPU, the trainer
+# degrades to standard cross-entropy (identical loss, higher memory).
+train = [
+    "flash-linear-attention==0.5.0",
+]
+all = [
+    "torch>=2.7",
+    "torchvision",
+    "timm>=1.0",
+    "transformers==5.6.2",
+    "peft>=0.19",
+    "accelerate>=1.13",
+    "datasets>=4.8",
+    "qwen-vl-utils",
+    "rdkit>=2024.3.1",
+    "SmilesPE>=0.0.3",
+    "pyarrow>=15.0",
+    "pydantic>=2.0",
+    "sentencepiece>=0.2.0",
+    "tiktoken>=0.7",
+    "flash-linear-attention==0.5.0",
+]
+augment = ["albumentations>=2.0"]
+report = ["wandb-workspaces"]
+# Frontier-model baselines (tools/frontier_baseline): query hosted models via
+# litellm to score under the same benchmarks + scorers as MarkushGlyph. Kept
+# out of the core runtime deps on purpose.
+baseline = ["litellm>=1.6"]
+
+[build-system]
+requires = ["setuptools>=77", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["glyph*"]
+
+[tool.setuptools.package-data]
+"glyph.ocsr" = [
+    "vocab/*.json",
+    "_indigo/LICENSE",
+    "_indigo/NOTICE",
+    "_indigo/lib/**/*",
+]
+
+[tool.uv]
+index-strategy = "unsafe-best-match"
+
+[[tool.uv.index]]
+name = "pypi"
+url = "https://pypi.org/simple"
+
+[[tool.uv.index]]
+name = "pytorch-cu128"
+url = "https://download.pytorch.org/whl/cu128"
+explicit = true
+
+[tool.uv.sources]
+torch = [
+    { index = "pytorch-cu128", marker = "sys_platform == 'linux'" },
+]
+torchvision = [
+    { index = "pytorch-cu128", marker = "sys_platform == 'linux'" },
+    { index = "pypi", marker = "sys_platform != 'linux'" },
+]
+
+[dependency-groups]
+dev = [
+    "build>=1.2",
+    "pre-commit>=4.0",
+    "pytest>=8.0",
+    "ruff>=0.8",
+    "ty>=0.0.62",
+]
+
+[project.scripts]
+glyph = "glyph.cli:app"
+markush-data-pipeline = "glyph.markush.data.pipeline:main"
+markush-eval-checkpoint = "glyph.markush.eval.checkpoint:main"
+markush-eval-samples = "glyph.markush.eval.sample_validation:main"
+
+[tool.ty.src]
+include = ["glyph"]
+exclude = [
+    "glyph/markush/data/",
+    "glyph/ocsr/_chem/",
+    "glyph/ocsr/_indigo/",
+]
+
+[tool.ty.rules]
+# `ty` runs as an advisory CI job on the core environment, without the heavy ML and
+# optional extras installed (torch, transformers, peft, rdkit, datasets, networkx,
+# qwen_vl_utils, pyarrow, ...). Cross-boundary import and attribute resolution is
+# therefore not meaningful in that environment, and the remaining findings are
+# advisory type-inference nits. Downgrade these categories so the job is a clean,
+# actionable signal rather than environment noise (it stays informational).
+unresolved-import = "ignore"
+unresolved-attribute = "ignore"
+unused-ignore-comment = "ignore"
+invalid-argument-type = "ignore"
+invalid-assignment = "ignore"
+invalid-return-type = "ignore"
+call-non-callable = "ignore"
+no-matching-overload = "ignore"
+deprecated = "ignore"
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+extend-exclude = [
+    "glyph/markush/data/",
+    "glyph/ocsr/_chem/",
+    "glyph/ocsr/_indigo/",
+    "wandb/",
+    "checkpoints/",
+]
+
+[tool.ruff.lint]
+select = [
+    "E",
+    "W",
+    "F",
+    "I",
+    "B",
+    "C4",
+    "UP",
+    "SIM",
+    "N",
+    "RUF",
+]
+ignore = [
+    "E501",
+    "B008",
+    "N812",
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = [
+    "N802",
+    "N803",
+    "N806",
+    "RUF059",
+]
+"scripts/**" = ["T201"]
+
+[tool.ruff.format]
+docstring-code-format = true

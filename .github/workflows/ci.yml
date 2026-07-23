@@ -1,0 +1,70 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+env:
+  UV_FROZEN: "1"
+
+jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+      - name: Install lint dependencies
+        run: uv sync --only-dev
+      - name: Ruff check
+        run: uv run --no-sync ruff check .
+      - name: Ruff format check
+        run: uv run --no-sync ruff format --check .
+
+  typecheck:
+    name: Type check (advisory)
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+      - name: Install core and development dependencies
+        run: uv sync
+      - name: Run ty
+        run: uv run --no-sync ty check glyph --output-format github
+
+  tests:
+    name: Tests (CPU)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+      - name: Install test tooling
+        run: uv sync --only-dev
+      - name: Install package test stacks with CPU PyTorch
+        # Ignore the development-only CUDA source pin, then force Astral's CPU backend.
+        run: >-
+          uv pip install --python .venv/bin/python --no-sources --torch-backend cpu
+          --editable ".[all]"
+      - name: Run OCSR tests
+        run: uv run --no-sync pytest tests/ocsr -q
+      - name: Run Markush tests
+        run: uv run --no-sync pytest tests -q --ignore=tests/ocsr

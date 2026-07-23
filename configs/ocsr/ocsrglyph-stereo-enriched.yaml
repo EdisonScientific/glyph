@@ -1,0 +1,105 @@
+# OCSRGlyph — exact training recipe behind the published USPTO-5719
+#
+# This file is the authoritative, human-readable capture of the recipe. The
+# trainer (`python -m glyph.ocsr.train`) is argparse-driven, not YAML-driven,
+# so the values below are mirrored 1:1 by `scripts/train_ocsrglyph.sh`, which
+# translates them into the trainer's CLI flags. The model/optimization knobs
+# also match `glyph.ocsr.baseline_config.BaselineRecipe` (the dataclass the
+# trainer actually instantiates).
+#
+# Source of truth: the OCSRGlyph stereo-enriched training run.
+
+# --- Model / architecture -----------------------------------------------------
+model:
+  encoder_name: swin_base_patch4_window12_384  # Swin-B/384 vision encoder
+  input_size: 384
+  use_checkpoint: true                         # gradient checkpointing on the encoder
+  backbone_pretrained: true                    # ImageNet-pretrained backbone only;
+                                               # OCSR-specific pretrained checkpoints forbidden
+  decoder_kind: transformer
+  embed_dim: 256
+  dec_num_layers: 6
+  dec_attn_heads: 8
+  dec_ff_dim: 1024
+  max_target_len: 256          # effective decode length: the model's positional
+                               # embedding, training, and inference all cap at 256
+                               # (min(max_target_len, 256)). The upstream recipe
+                               # max was 480 (MolScribe FORMAT_INFO chartok max_len),
+                               # but 256 is what actually runs end to end.
+  vocab_size: 101              # MolNexTR/MolScribe char-SMILES vocab
+  sos_id: 1
+  eos_id: 2
+  pad_id: 0
+
+# --- Optimization -------------------------------------------------------------
+optim:
+  max_steps: 100000
+  batch_size_per_gpu: 32       # 32 x 8 GPUs = 256 effective
+  effective_batch_size: 256
+  encoder_lr: 0.0004           # 4e-4
+  decoder_lr: 0.0004           # 4e-4
+  weight_decay: 1.0e-6
+  cosine_schedule: true
+  warmup_ratio: 0.02
+  label_smoothing: 0.1
+  grad_clip_max_norm: 5.0
+  amp: bf16                    # bfloat16 autocast (--bf16_amp)
+  num_workers: 8
+  seed: 42
+
+# --- Data mix -----------------------------------------------------------------
+# Total dataset_size = 2,209,724 rows:
+#   1,000,000 (PubChem-1M) + 680,220 (USPTO-680K)
+#   + 2 x 200,000 (stereo_200k_white) + 2 x 64,752 (adjacent_ring).
+# The "x2" repeats are ConcatDataset weighting (loader-level), not physical
+# duplication; weighted_sampler is OFF. target_format = chartok_smiles_only.
+#
+# All paths are relative to ${GLYPH_DATA_ROOT}. PubChem-1M + USPTO-680K are
+# public (HF `CYF200127/MolNexTR`, pin a revision). The stereo_200k_white and
+# adjacent_ring enrichment CSVs are shipped FROZEN in the
+# `EdisonScientific/glyph-datasets` HF dataset repo (no committed generator);
+# use the published CSVs verbatim.
+data:
+  target_format: chartok_smiles_only
+  weighted_sampler: false
+  components:
+    - name: pubchem_1m
+      kind: pubchem_indigo            # rendered on-the-fly with vendored Indigo
+      csv: datasets/ocsr/pubchem_1m/pubchem_1m.csv
+      rows: 1000000
+      repeat: 1
+    - name: uspto_680k
+      kind: uspto_mol                 # (SMILES, file_path) with a pre-rendered image root
+      csv: datasets/ocsr/uspto_680k/train.csv
+      image_root: datasets/ocsr/uspto_680k/images
+      path_strip_prefix: uspto_mol/
+      rows: 680220
+      repeat: 1
+    - name: stereo_200k_white
+      kind: uspto_mol                 # frozen enrichment; UsptoMol-format loader
+      # Produced by `glyph data prepare --ocsr` (white-crop of external MolSight
+      # Robert-zwr/Stereo-200k). The rewritten CSV's `file_path` column already
+      # carries the `train/` split segment, so image_root is the dataset dir
+      # (image_root / file_path -> stereo_200k_white/train/<name>.png).
+      csv: datasets/ocsr/stereo_200k_white/train.csv
+      image_root: datasets/ocsr/stereo_200k_white
+      rows: 200000
+      repeat: 2
+    - name: adjacent_ring
+      kind: pubchem_indigo            # frozen enrichment; PubChem-format loader (Indigo render)
+      csv: hub:adjacent_ring
+      rows: 64752
+      repeat: 2
+
+# --- Experiment tracking ------------------------------------------------------
+# Configurable at launch; set WANDB_MODE=offline for network-free runs.
+wandb:
+  project: glyph-ocsr
+  entity: null
+
+# --- Launch -------------------------------------------------------------------
+# See scripts/train_ocsrglyph.sh (torchrun launcher; auto-detects the GPUs
+# present, floor 1, set NUM_GPUS to pin the topology — e.g. NUM_GPUS=8 for the
+# published 8-GPU / 256-effective-batch run). On small-VRAM GPUs lower
+# BATCH_SIZE_PER_GPU (recipe 32 targets ~80 GB cards). The published checkpoint
+# is the final step100000.pth.

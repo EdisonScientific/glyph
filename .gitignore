@@ -1,0 +1,46 @@
+# Python
+__pycache__/
+*.pyc
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage*
+htmlcov/
+dist/
+build/
+.venv/
+.worktrees/
+
+# Data (too large for git)
+/data/
+checkpoints/
+wandb/
+logs/
+/reports/
+/artifacts/markush-transcribe/
+/eval-runs/
+*.tgz
+*.tgz.sha256
+*.jsonl
+!tools/mg2_scorer/cached_predictions/*.jsonl
+*.png
+*.jpg
+!docs/grading_audit/dataset_examples/images/*.png
+
+# Environment
+.env
+.netrc
+.claude/
+*.log
+
+# OS
+.DS_Store
+models/
+docs/grading_audit/molparser_markush/review_packet/images/
+
+# generated artifacts + heavy vendored tool deps (local-only)
+artifacts/
+tools/mg2_scorer/vendor/
+tools/mg2_scorer/local-mg2-reproduction/
+tools/frontier_baseline/.venv-baseline/

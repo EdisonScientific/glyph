@@ -1,0 +1,16 @@
+# Pinned environment used for running DS4SD/MarkushGrapher public scoring only.
+# This is a SEPARATE env from the project's base uv.lock (older rdkit + extra
+# deps the base lock does not carry). Create with e.g.:
+#   uv venv --python 3.11 tools/mg2_scorer/.venv-mg2
+#   uv pip install --python tools/mg2_scorer/.venv-mg2/bin/python -r tools/mg2_scorer/requirements-public-mg2.txt
+numpy==1.24.4
+rdkit==2024.3.5
+torch==2.2.0
+torchvision==0.17.0
+nltk
+rouge-score
+transformers
+tqdm
+matplotlib
+Pillow>=10.3
+datasets

@@ -1,0 +1,73 @@
+# Qwen3.5-2B Markush synthetic-mix 350k (250k base + 100k synthetic-rendered).
+# Self-contained config; launch via:
+#   python -m glyph.markush.train.sft --config configs/ablations/synthetic-mix/sft_2b_markush_synth350k.yaml
+# (the synthetic mix is supplied by data_path below, not hub:markush/train.jsonl.)
+# Markush eval runs inline over all 3 benchmarks; OCSR-as-Markush eval disabled.
+
+model_path: Qwen/Qwen3.5-2B-Base
+# Appendix synthetic-augmentation ablation (250K base + 100K synthetic renders). NOT emitted by
+# `glyph data prepare`; requires an external synthetic-generation arm that is not part of this release.
+data_path: ${GLYPH_DATA_ROOT}/datasets/markush/prepared/synthetic_mix_350k_seed74/train.jsonl
+output_dir: ${GLYPH_DATA_ROOT}/checkpoints/sft-2b-markush-synth350k
+logging_dir: ${GLYPH_DATA_ROOT}/checkpoints/sft-2b-markush-synth350k/logs
+run_name: sft-2b-markush-synth350k
+
+text_dropout: 0.0
+image_augmentation: true
+image_augmentation_prob: 0.4
+
+lora_r: 128
+lora_alpha: 128
+lora_dropout: 0.05
+vision_lora: true
+vision_lora_r: 32
+vision_lora_alpha: 32
+full_finetune: false
+
+learning_rate: 5.0e-5
+warmup_steps: 500
+max_steps: 20000
+per_device_train_batch_size: 4
+per_device_eval_batch_size: 4
+gradient_accumulation_steps: 1
+max_grad_norm: 1.0
+weight_decay: 0.0
+lr_scheduler_type: cosine
+
+save_steps: 2000
+eval_steps: 2000
+save_total_limit: 12
+logging_steps: 5
+load_best_model_at_end: false
+metric_for_best_model: null
+greater_is_better: true
+
+# Full Markush inline eval (all 3 benchmarks, all rows)
+metrics_eval_size: 1055
+metrics_eval_steps: 2000
+metrics_eval_batch_size: 16
+metrics_eval_benchmarks: [ip5m, m2s, uspto-markush]
+metrics_eval_protocol: both
+metrics_eval_max_new_tokens: 1024
+# Inline metrics-eval target canonicalization. Affects the training-time metrics
+# eval only -- not the training objective or the saved weights. Set false to match
+# the published training runs.
+metrics_eval_canonicalize_markush_targets: false
+metrics_eval_require_canonical_markush_targets: false
+metrics_eval_data_dir: ${GLYPH_DATA_ROOT}/benchmarks/markush
+
+# OCSR-as-Markush eval disabled in this config
+
+bf16: true
+optim: adamw_torch_fused
+dataloader_num_workers: 8
+dataloader_prefetch_factor: 4
+fused_cross_entropy: true
+max_assistant_chars: 4000
+
+report_to: [wandb]
+wandb_project: glyph-markush
+wandb_entity: null
+no_wandb: false
+
+seed: 74
