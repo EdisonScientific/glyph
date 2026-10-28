@@ -1,6 +1,6 @@
 # Qwen3.5-2B Markush OCSR-as-Markush fraction 5pct.
 # Self-contained config; launch via:
-#   python -m glyph.markush.train.sft --config configs/ablations/ocsr-as-markush-fraction/sft_2b_markush_ocsr5pct.yaml --data-path hub:markush/train.jsonl
+#   torchrun --nproc_per_node 8 -m glyph.markush.train.sft --config configs/ablations/ocsr-as-markush-fraction/sft_2b_markush_ocsr5pct.yaml --data-path hub:markush/train.jsonl
 # Markush eval runs inline over all 3 benchmarks; OCSR-as-Markush eval disabled.
 
 model_path: Qwen/Qwen3.5-2B-Base
@@ -24,7 +24,7 @@ full_finetune: false
 learning_rate: 5.0e-5
 warmup_steps: 500
 max_steps: 20000
-per_device_train_batch_size: 4
+per_device_train_batch_size: 4  # x 8 GPUs = 32 effective
 per_device_eval_batch_size: 4
 gradient_accumulation_steps: 1
 max_grad_norm: 1.0

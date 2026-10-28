@@ -187,7 +187,7 @@ The recipe ([`configs/ocsr/ocsrglyph-stereo-enriched.yaml`](configs/ocsr/ocsrgly
 ```bash
 export GLYPH_DATA_ROOT=/path/to/data
 uv run glyph data prepare --markush --allow-large   # source images
-uv run python -m glyph.markush.train.sft \
+uv run torchrun --nproc_per_node 8 -m glyph.markush.train.sft \
     --config configs/ablations/ocsr-as-markush-fraction/sft_2b_markush_ocsr5pct.yaml \
     --data-path hub:markush/train.jsonl
 ```
